@@ -8,7 +8,7 @@ use std::borrow::Cow;
 use tdlib::enums::{MessageContent, StickerType, UserType};
 
 use crate::session::chat::{ChatType, Item, ItemType, Message, MessageSender, SponsoredMessage};
-use crate::session::content::message_row::{MessagePhoto, MessageSticker, MessageText};
+use crate::session::content::message_row::{MessageMedia, MessageSticker, MessageText};
 use crate::session::content::{EventRow, MessageRow, MessageRowExt};
 use crate::session::User;
 use crate::utils::MESSAGE_TRUNCATED_LENGTH;
@@ -103,7 +103,7 @@ impl ItemRow {
 
                         match content {
                             MessageContent::MessagePhoto(_) => {
-                                self.set_child_row::<MessagePhoto>(message.to_owned().upcast())
+                                self.set_child_row::<MessageMedia>(message.clone().upcast())
                             }
                             MessageContent::MessageSticker(data)
                                 if matches!(data.sticker.r#type, StickerType::Static)
