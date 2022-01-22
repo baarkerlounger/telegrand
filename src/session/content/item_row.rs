@@ -102,7 +102,8 @@ impl ItemRow {
                         let content = message.content().0;
 
                         match content {
-                            MessageContent::MessagePhoto(_) => {
+                            MessageContent::MessageAnimation(_)
+                            | MessageContent::MessagePhoto(_) => {
                                 self.set_child_row::<MessageMedia>(message.clone().upcast())
                             }
                             MessageContent::MessageSticker(data)
