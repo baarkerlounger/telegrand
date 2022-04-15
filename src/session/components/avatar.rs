@@ -220,7 +220,7 @@ impl Avatar {
             } else if let Some(user) = item.downcast_ref::<User>() {
                 self.load_image(user.avatar(), user.session());
                 let handler_id =
-                    user.connect_avatar_notify(clone!(@weak self as obj => move |user, _| {
+                    user.connect_avatar_notify(clone!(@weak self as obj => move |user| {
                         obj.load_image(user.avatar(), user.session());
                     }));
                 imp.handler_id.replace(Some(handler_id));

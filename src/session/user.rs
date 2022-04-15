@@ -1,11 +1,5 @@
 use gtk::glib;
-use gtk::prelude::*;
-use gtk::subclass::prelude::*;
-use tdlib::enums::{Update, UserStatus, UserType};
-use tdlib::types::User as TdUser;
-
-use crate::session::Avatar;
-use crate::Session;
+use tdlib::enums::{UserStatus, UserType};
 
 #[derive(Clone, Debug, PartialEq, glib::Boxed)]
 #[boxed_type(name = "BoxedUserType")]
@@ -15,297 +9,129 @@ pub(crate) struct BoxedUserType(pub(crate) UserType);
 #[boxed_type(name = "BoxedUserStatus")]
 pub(crate) struct BoxedUserStatus(pub(crate) UserStatus);
 
-mod imp {
+#[gobject::class(final)]
+mod user {
     use super::*;
-    use glib::WeakRef;
-    use once_cell::sync::Lazy;
+    use gobject::{ConstructCell, WeakCell};
+    use gtk::subclass::prelude::*;
     use std::cell::{Cell, RefCell};
+    use tdlib::enums::Update;
+    use tdlib::types::User as TdUser;
 
-    #[derive(Debug, Default)]
+    use crate::session::Avatar;
+    use crate::Session;
+
+    #[derive(Default)]
     pub(crate) struct User {
-        pub(super) id: Cell<i64>,
-        pub(super) type_: RefCell<Option<BoxedUserType>>,
-        pub(super) first_name: RefCell<String>,
-        pub(super) last_name: RefCell<String>,
-        pub(super) username: RefCell<String>,
-        pub(super) phone_number: RefCell<String>,
-        pub(super) avatar: RefCell<Option<Avatar>>,
-        pub(super) status: RefCell<Option<BoxedUserStatus>>,
-        pub(super) session: WeakRef<Session>,
+        #[property(get)]
+        id: Cell<i64>,
+        #[property(get)]
+        first_name: RefCell<String>,
+        #[property(get)]
+        last_name: RefCell<String>,
+        #[property(get)]
+        username: RefCell<String>,
+        #[property(get)]
+        phone_number: RefCell<String>,
+        #[property(get, boxed)]
+        status: ConstructCell<BoxedUserStatus>,
+        #[property(get, boxed)]
+        avatar: RefCell<Option<Avatar>>,
+        #[property(get, boxed)]
+        type_: ConstructCell<BoxedUserType>,
+        #[property(get, object)]
+        session: WeakCell<Session>,
     }
 
-    #[glib::object_subclass]
-    impl ObjectSubclass for User {
-        const NAME: &'static str = "User";
-        type Type = super::User;
-    }
+    impl super::User {
+        pub(crate) fn from_td_object(td_object: TdUser, session: &Session) -> Self {
+            let obj: Self = glib::Object::new(&[]).unwrap();
+            let imp = obj.imp();
 
-    impl ObjectImpl for User {
-        fn properties() -> &'static [glib::ParamSpec] {
-            static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
-                vec![
-                    glib::ParamSpecInt64::new(
-                        "id",
-                        "Id",
-                        "The id of this user",
-                        std::i64::MIN,
-                        std::i64::MAX,
-                        0,
-                        glib::ParamFlags::READWRITE | glib::ParamFlags::CONSTRUCT_ONLY,
-                    ),
-                    glib::ParamSpecBoxed::new(
-                        "type",
-                        "Type",
-                        "The type of this user",
-                        BoxedUserType::static_type(),
-                        glib::ParamFlags::READWRITE
-                            | glib::ParamFlags::CONSTRUCT
-                            | glib::ParamFlags::EXPLICIT_NOTIFY,
-                    ),
-                    glib::ParamSpecString::new(
-                        "first-name",
-                        "First Name",
-                        "The first name of this user",
-                        Some(""),
-                        glib::ParamFlags::READWRITE
-                            | glib::ParamFlags::CONSTRUCT
-                            | glib::ParamFlags::EXPLICIT_NOTIFY,
-                    ),
-                    glib::ParamSpecString::new(
-                        "last-name",
-                        "Last Name",
-                        "The last name of this user",
-                        Some(""),
-                        glib::ParamFlags::READWRITE
-                            | glib::ParamFlags::CONSTRUCT
-                            | glib::ParamFlags::EXPLICIT_NOTIFY,
-                    ),
-                    glib::ParamSpecString::new(
-                        "username",
-                        "Username",
-                        "The username of this user",
-                        Some(""),
-                        glib::ParamFlags::READWRITE
-                            | glib::ParamFlags::CONSTRUCT
-                            | glib::ParamFlags::EXPLICIT_NOTIFY,
-                    ),
-                    glib::ParamSpecString::new(
-                        "phone-number",
-                        "Phone Number",
-                        "The phone number of this user",
-                        Some(""),
-                        glib::ParamFlags::READWRITE
-                            | glib::ParamFlags::CONSTRUCT
-                            | glib::ParamFlags::EXPLICIT_NOTIFY,
-                    ),
-                    glib::ParamSpecBoxed::new(
-                        "avatar",
-                        "Avatar",
-                        "The avatar of this user",
-                        Avatar::static_type(),
-                        glib::ParamFlags::READWRITE | glib::ParamFlags::EXPLICIT_NOTIFY,
-                    ),
-                    glib::ParamSpecBoxed::new(
-                        "status",
-                        "Status",
-                        "The status of this user",
-                        BoxedUserStatus::static_type(),
-                        glib::ParamFlags::READWRITE
-                            | glib::ParamFlags::CONSTRUCT
-                            | glib::ParamFlags::EXPLICIT_NOTIFY,
-                    ),
-                    glib::ParamSpecObject::new(
-                        "session",
-                        "Session",
-                        "The session",
-                        Session::static_type(),
-                        glib::ParamFlags::READWRITE | glib::ParamFlags::CONSTRUCT_ONLY,
-                    ),
-                ]
-            });
-            PROPERTIES.as_ref()
+            imp.id.set(td_object.id);
+            imp.first_name.replace(td_object.first_name);
+            imp.last_name.replace(td_object.last_name);
+            imp.username.replace(td_object.username);
+            imp.phone_number.replace(td_object.phone_number);
+            imp.status.replace(Some(BoxedUserStatus(td_object.status)));
+            imp.avatar
+                .replace(td_object.profile_photo.map(Avatar::from));
+            imp.type_.replace(Some(BoxedUserType(td_object.r#type)));
+            imp.session.set(Some(session));
+
+            obj
         }
 
-        fn set_property(
-            &self,
-            obj: &Self::Type,
-            _id: usize,
-            value: &glib::Value,
-            pspec: &glib::ParamSpec,
-        ) {
-            match pspec.name() {
-                "id" => self.id.set(value.get().unwrap()),
-                "type" => obj.set_type(value.get().unwrap()),
-                "first-name" => {
-                    obj.set_first_name(value.get::<Option<String>>().unwrap().unwrap_or_default())
+        pub(crate) fn handle_update(&self, update: Update) {
+            match update {
+                Update::User(data) => {
+                    self.set_first_name(data.user.first_name);
+                    self.set_last_name(data.user.last_name);
+                    self.set_username(data.user.username);
+                    self.set_phone_number(data.user.phone_number);
+                    self.set_status(BoxedUserStatus(data.user.status));
+                    self.set_avatar(data.user.profile_photo.map(Avatar::from));
+                    self.set_type(BoxedUserType(data.user.r#type));
                 }
-                "last-name" => {
-                    obj.set_last_name(value.get::<Option<String>>().unwrap().unwrap_or_default())
-                }
-                "username" => {
-                    obj.set_username(value.get::<Option<String>>().unwrap().unwrap_or_default())
-                }
-                "phone-number" => {
-                    obj.set_phone_number(value.get::<Option<String>>().unwrap().unwrap_or_default())
-                }
-                "avatar" => obj.set_avatar(value.get().unwrap()),
-                "status" => obj.set_status(value.get().unwrap()),
-                "session" => self.session.set(Some(&value.get().unwrap())),
-                _ => unimplemented!(),
+                Update::UserStatus(data) => self.set_status(BoxedUserStatus(data.status)),
+                _ => {}
             }
         }
 
-        fn property(&self, obj: &Self::Type, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
-            match pspec.name() {
-                "id" => obj.id().to_value(),
-                "type" => obj.type_().to_value(),
-                "first-name" => obj.first_name().to_value(),
-                "last-name" => obj.last_name().to_value(),
-                "username" => obj.username().to_value(),
-                "phone-number" => obj.phone_number().to_value(),
-                "avatar" => obj.avatar().to_value(),
-                "status" => obj.status().to_value(),
-                "session" => obj.session().to_value(),
-                _ => unimplemented!(),
+        fn set_first_name(&self, first_name: String) {
+            let imp = self.imp();
+            let old = imp.first_name.replace(first_name);
+            if old != *imp.first_name.borrow() {
+                self.notify_first_name();
             }
         }
-    }
-}
 
-glib::wrapper! {
-    pub(crate) struct User(ObjectSubclass<imp::User>);
-}
-
-impl User {
-    pub(crate) fn from_td_object(user: TdUser, session: &Session) -> Self {
-        let avatar = user.profile_photo.map(Avatar::from);
-
-        glib::Object::new(&[
-            ("id", &user.id),
-            ("type", &BoxedUserType(user.r#type)),
-            ("first-name", &user.first_name),
-            ("last-name", &user.last_name),
-            ("username", &user.username),
-            ("phone-number", &user.phone_number),
-            ("status", &BoxedUserStatus(user.status)),
-            ("avatar", &avatar),
-            ("session", &session),
-        ])
-        .expect("Failed to create User")
-    }
-
-    pub(crate) fn handle_update(&self, update: Update) {
-        match update {
-            Update::User(data) => {
-                self.set_type(BoxedUserType(data.user.r#type));
-                self.set_first_name(data.user.first_name);
-                self.set_last_name(data.user.last_name);
-                self.set_username(data.user.username);
-                self.set_phone_number(data.user.phone_number);
-                self.set_status(BoxedUserStatus(data.user.status));
-                self.set_avatar(data.user.profile_photo.map(Into::into));
+        fn set_last_name(&self, last_name: String) {
+            let imp = self.imp();
+            let old = imp.last_name.replace(last_name);
+            if old != *imp.last_name.borrow() {
+                self.notify_last_name();
             }
-            Update::UserStatus(data) => self.set_status(BoxedUserStatus(data.status)),
-            _ => {}
         }
-    }
 
-    pub(crate) fn id(&self) -> i64 {
-        self.imp().id.get()
-    }
-
-    pub(crate) fn type_(&self) -> BoxedUserType {
-        self.imp().type_.borrow().as_ref().unwrap().to_owned()
-    }
-
-    pub(crate) fn set_type(&self, type_: BoxedUserType) {
-        if self.imp().type_.borrow().as_ref() == Some(&type_) {
-            return;
+        fn set_username(&self, username: String) {
+            let imp = self.imp();
+            let old = imp.username.replace(username);
+            if old != *imp.username.borrow() {
+                self.notify_username();
+            }
         }
-        self.imp().type_.replace(Some(type_));
-        self.notify("type");
-    }
 
-    pub(crate) fn first_name(&self) -> String {
-        self.imp().first_name.borrow().to_owned()
-    }
-
-    pub(crate) fn set_first_name(&self, first_name: String) {
-        if self.first_name() == first_name {
-            return;
+        fn set_phone_number(&self, phone_number: String) {
+            let imp = self.imp();
+            let old = imp.phone_number.replace(phone_number);
+            if old != *imp.phone_number.borrow() {
+                self.notify_phone_number();
+            }
         }
-        self.imp().first_name.replace(first_name);
-        self.notify("first-name");
-    }
 
-    pub(crate) fn last_name(&self) -> String {
-        self.imp().last_name.borrow().to_owned()
-    }
-
-    pub(crate) fn set_last_name(&self, last_name: String) {
-        if self.last_name() == last_name {
-            return;
+        fn set_status(&self, status: BoxedUserStatus) {
+            let imp = self.imp();
+            let old = imp.status.replace(Some(status));
+            if old != *imp.status.borrow() {
+                self.notify_status();
+            }
         }
-        self.imp().last_name.replace(last_name);
-        self.notify("last-name");
-    }
 
-    pub(crate) fn username(&self) -> String {
-        self.imp().username.borrow().to_owned()
-    }
-
-    pub(crate) fn set_username(&self, username: String) {
-        if self.username() == username {
-            return;
+        fn set_avatar(&self, avatar: Option<Avatar>) {
+            let imp = self.imp();
+            let old = imp.avatar.replace(avatar);
+            if old != *imp.avatar.borrow() {
+                self.notify_avatar();
+            }
         }
-        self.imp().username.replace(username);
-        self.notify("username");
-    }
 
-    pub(crate) fn phone_number(&self) -> String {
-        self.imp().phone_number.borrow().to_owned()
-    }
-
-    pub(crate) fn set_phone_number(&self, phone_number: String) {
-        if self.phone_number() == phone_number {
-            return;
+        fn set_type(&self, type_: BoxedUserType) {
+            let imp = self.imp();
+            let old = imp.type_.replace(Some(type_));
+            if old != *imp.type_.borrow() {
+                self.notify_type();
+            }
         }
-        self.imp().phone_number.replace(phone_number);
-        self.notify("phone-number");
-    }
-
-    pub(crate) fn avatar(&self) -> Option<Avatar> {
-        self.imp().avatar.borrow().to_owned()
-    }
-
-    pub(crate) fn set_avatar(&self, avatar: Option<Avatar>) {
-        if self.avatar() == avatar {
-            return;
-        }
-        self.imp().avatar.replace(avatar);
-        self.notify("avatar");
-    }
-
-    pub(crate) fn connect_avatar_notify<F: Fn(&Self, &glib::ParamSpec) + 'static>(
-        &self,
-        f: F,
-    ) -> glib::SignalHandlerId {
-        self.connect_notify_local(Some("avatar"), f)
-    }
-
-    pub(crate) fn status(&self) -> BoxedUserStatus {
-        self.imp().status.borrow().as_ref().unwrap().to_owned()
-    }
-
-    pub(crate) fn set_status(&self, status: BoxedUserStatus) {
-        if self.imp().status.borrow().as_ref() == Some(&status) {
-            return;
-        }
-        self.imp().status.replace(Some(status));
-        self.notify("status");
-    }
-
-    pub(crate) fn session(&self) -> Session {
-        self.imp().session.upgrade().unwrap()
     }
 }
