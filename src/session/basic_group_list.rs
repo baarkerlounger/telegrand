@@ -1,29 +1,20 @@
-use gtk::prelude::*;
-use gtk::subclass::prelude::*;
-use gtk::{gio, glib};
-use indexmap::map::Entry;
-use tdlib::enums::Update;
-
-use crate::session::BasicGroup;
-
-mod imp {
-    use super::*;
+#[gobject::class(final, implements(gtk::gio::ListModel))]
+mod basic_group_list {
+    use gtk::glib;
+    use gtk::prelude::*;
+    use gtk::subclass::prelude::*;
+    use indexmap::map::Entry;
     use indexmap::IndexMap;
     use std::cell::RefCell;
+    use tdlib::enums::Update;
 
-    #[derive(Debug, Default)]
+    use crate::session::BasicGroup;
+
+    #[derive(Default)]
     pub(crate) struct BasicGroupList {
-        pub(super) list: RefCell<IndexMap<i64, BasicGroup>>,
+        list: RefCell<IndexMap<i64, BasicGroup>>,
     }
 
-    #[glib::object_subclass]
-    impl ObjectSubclass for BasicGroupList {
-        const NAME: &'static str = "BasicGroupList";
-        type Type = super::BasicGroupList;
-        type Interfaces = (gio::ListModel,);
-    }
-
-    impl ObjectImpl for BasicGroupList {}
     impl ListModelImpl for BasicGroupList {
         fn item_type(&self, _list_model: &Self::Type) -> glib::Type {
             BasicGroup::static_type()
@@ -37,55 +28,38 @@ mod imp {
             self.list
                 .borrow()
                 .get_index(position as usize)
-                .map(|(_, i)| i.upcast_ref())
-                .cloned()
+                .map(|(_, o)| o.clone().upcast::<glib::Object>())
         }
     }
-}
 
-glib::wrapper! {
-    pub(crate) struct BasicGroupList(ObjectSubclass<imp::BasicGroupList>)
-        @implements gio::ListModel;
-}
+    impl super::BasicGroupList {
+        pub(crate) fn new() -> Self {
+            glib::Object::new(&[]).unwrap()
+        }
 
-impl Default for BasicGroupList {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+        /// Return the `BasicGroup` of the specified `id`. Panics if the basic group is not present.
+        /// Note that TDLib guarantees that objects are always returned before of their ids,
+        /// so if you use an `id` returned by TDLib, it should be expected that the relative
+        /// `BasicGroup` exists in the list.
+        pub(crate) fn get(&self, id: i64) -> BasicGroup {
+            self.imp().list.borrow().get(&id).unwrap().clone()
+        }
 
-impl BasicGroupList {
-    pub(crate) fn new() -> Self {
-        glib::Object::new(&[]).expect("Failed to create BasicGroupList")
-    }
+        pub(crate) fn handle_update(&self, update: Update) {
+            if let Update::BasicGroup(data) = update {
+                let mut list = self.imp().list.borrow_mut();
 
-    /// Return the `BasicGroup` of the specified `id`. Panics if the basic group is not present.
-    /// Note that TDLib guarantees that types are always returned before their ids,
-    /// so if you use an `id` returned by TDLib, it should be expected that the
-    /// relative `BasicGroup` exists in the list.
-    pub(crate) fn get(&self, id: i64) -> BasicGroup {
-        self.imp()
-            .list
-            .borrow()
-            .get(&id)
-            .expect("Failed to get expected BasicGroup")
-            .to_owned()
-    }
+                match list.entry(data.basic_group.id) {
+                    Entry::Occupied(entry) => entry.get().handle_update(Update::BasicGroup(data)),
+                    Entry::Vacant(entry) => {
+                        let basic_group = data.basic_group.into();
+                        entry.insert(basic_group);
 
-    pub(crate) fn handle_update(&self, update: Update) {
-        if let Update::BasicGroup(data) = update {
-            let mut list = self.imp().list.borrow_mut();
+                        let index = list.len() - 1;
+                        drop(list);
 
-            match list.entry(data.basic_group.id) {
-                Entry::Occupied(entry) => entry.get().handle_update(Update::BasicGroup(data)),
-                Entry::Vacant(entry) => {
-                    let basic_group = data.basic_group.into();
-                    entry.insert(basic_group);
-
-                    let position = (list.len() - 1) as u32;
-                    drop(list);
-
-                    self.items_changed(position, 0, 1);
+                        self.items_changed(index as u32, 0, 1);
+                    }
                 }
             }
         }
