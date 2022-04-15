@@ -72,14 +72,14 @@ impl BasicGroupList {
             .to_owned()
     }
 
-    pub(crate) fn handle_update(&self, update: &Update) {
+    pub(crate) fn handle_update(&self, update: Update) {
         if let Update::BasicGroup(data) = update {
             let mut list = self.imp().list.borrow_mut();
 
             match list.entry(data.basic_group.id) {
-                Entry::Occupied(entry) => entry.get().handle_update(update),
+                Entry::Occupied(entry) => entry.get().handle_update(Update::BasicGroup(data)),
                 Entry::Vacant(entry) => {
-                    let basic_group = BasicGroup::from_td_object(&data.basic_group);
+                    let basic_group = data.basic_group.into();
                     entry.insert(basic_group);
 
                     let position = (list.len() - 1) as u32;
