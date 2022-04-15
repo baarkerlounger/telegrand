@@ -341,7 +341,7 @@ impl Session {
                 self.user_list().handle_update(update);
             }
             Update::BasicGroup(_) => self.basic_group_list().handle_update(&update),
-            Update::Supergroup(_) => self.supergroup_list().handle_update(&update),
+            Update::Supergroup(_) => self.supergroup_list().handle_update(update),
             Update::SecretChat(_) => self.secret_chat_list().handle_update(&update),
             Update::File(update) => {
                 self.handle_file_update(update.file);

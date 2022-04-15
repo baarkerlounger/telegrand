@@ -72,14 +72,14 @@ impl SupergroupList {
             .to_owned()
     }
 
-    pub(crate) fn handle_update(&self, update: &Update) {
+    pub(crate) fn handle_update(&self, update: Update) {
         if let Update::Supergroup(data) = update {
             let mut list = self.imp().list.borrow_mut();
 
             match list.entry(data.supergroup.id) {
-                Entry::Occupied(entry) => entry.get().handle_update(update),
+                Entry::Occupied(entry) => entry.get().handle_update(Update::Supergroup(data)),
                 Entry::Vacant(entry) => {
-                    let supergroup = Supergroup::from_td_object(&data.supergroup);
+                    let supergroup = data.supergroup.into();
                     entry.insert(supergroup);
 
                     let position = (list.len() - 1) as u32;
