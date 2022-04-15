@@ -1,29 +1,20 @@
-use gtk::prelude::*;
-use gtk::subclass::prelude::*;
-use gtk::{gio, glib};
-use indexmap::map::Entry;
-use tdlib::enums::Update;
-
-use crate::session::Supergroup;
-
-mod imp {
-    use super::*;
+#[gobject::class(final, implements(gtk::gio::ListModel))]
+mod supergroup_list {
+    use gtk::glib;
+    use gtk::prelude::*;
+    use gtk::subclass::prelude::*;
+    use indexmap::map::Entry;
     use indexmap::IndexMap;
     use std::cell::RefCell;
+    use tdlib::enums::Update;
 
-    #[derive(Debug, Default)]
+    use crate::session::Supergroup;
+
+    #[derive(Default)]
     pub(crate) struct SupergroupList {
-        pub(super) list: RefCell<IndexMap<i64, Supergroup>>,
+        list: RefCell<IndexMap<i64, Supergroup>>,
     }
 
-    #[glib::object_subclass]
-    impl ObjectSubclass for SupergroupList {
-        const NAME: &'static str = "SupergroupList";
-        type Type = super::SupergroupList;
-        type Interfaces = (gio::ListModel,);
-    }
-
-    impl ObjectImpl for SupergroupList {}
     impl ListModelImpl for SupergroupList {
         fn item_type(&self, _list_model: &Self::Type) -> glib::Type {
             Supergroup::static_type()
@@ -37,55 +28,38 @@ mod imp {
             self.list
                 .borrow()
                 .get_index(position as usize)
-                .map(|(_, i)| i.upcast_ref())
-                .cloned()
+                .map(|(_, o)| o.clone().upcast::<glib::Object>())
         }
     }
-}
 
-glib::wrapper! {
-    pub(crate) struct SupergroupList(ObjectSubclass<imp::SupergroupList>)
-        @implements gio::ListModel;
-}
+    impl super::SupergroupList {
+        pub(crate) fn new() -> Self {
+            glib::Object::new(&[]).unwrap()
+        }
 
-impl Default for SupergroupList {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+        /// Return the `Supergroup` of the specified `id`. Panics if the supergroup is not present.
+        /// Note that TDLib guarantees that objects are always returned before of their ids,
+        /// so if you use an `id` returned by TDLib, it should be expected that the relative
+        /// `Supergroup` exists in the list.
+        pub(crate) fn get(&self, id: i64) -> Supergroup {
+            self.imp().list.borrow().get(&id).unwrap().clone()
+        }
 
-impl SupergroupList {
-    pub(crate) fn new() -> Self {
-        glib::Object::new(&[]).expect("Failed to create SupergroupList")
-    }
+        pub(crate) fn handle_update(&self, update: Update) {
+            if let Update::Supergroup(data) = update {
+                let mut list = self.imp().list.borrow_mut();
 
-    /// Return the `Supergroup` of the specified `id`. Panics if the supergroup is not present.
-    /// Note that TDLib guarantees that types are always returned before their ids,
-    /// so if you use an `id` returned by TDLib, it should be expected that the
-    /// relative `Supergroup` exists in the list.
-    pub(crate) fn get(&self, id: i64) -> Supergroup {
-        self.imp()
-            .list
-            .borrow()
-            .get(&id)
-            .expect("Failed to get expected Supergroup")
-            .to_owned()
-    }
+                match list.entry(data.supergroup.id) {
+                    Entry::Occupied(entry) => entry.get().handle_update(Update::Supergroup(data)),
+                    Entry::Vacant(entry) => {
+                        let supergroup = data.supergroup.into();
+                        entry.insert(supergroup);
 
-    pub(crate) fn handle_update(&self, update: Update) {
-        if let Update::Supergroup(data) = update {
-            let mut list = self.imp().list.borrow_mut();
+                        let index = list.len() - 1;
+                        drop(list);
 
-            match list.entry(data.supergroup.id) {
-                Entry::Occupied(entry) => entry.get().handle_update(Update::Supergroup(data)),
-                Entry::Vacant(entry) => {
-                    let supergroup = data.supergroup.into();
-                    entry.insert(supergroup);
-
-                    let position = (list.len() - 1) as u32;
-                    drop(list);
-
-                    self.items_changed(position, 0, 1);
+                        self.items_changed(index as u32, 0, 1);
+                    }
                 }
             }
         }
