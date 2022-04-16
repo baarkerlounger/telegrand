@@ -212,7 +212,7 @@ impl Avatar {
                 } else {
                     self.load_image(chat.avatar(), chat.session());
                     let handler_id =
-                        chat.connect_avatar_notify(clone!(@weak self as obj => move |chat, _| {
+                        chat.connect_avatar_notify(clone!(@weak self as obj => move |chat| {
                             obj.load_image(chat.avatar(), chat.session());
                         }));
                     imp.handler_id.replace(Some(handler_id));

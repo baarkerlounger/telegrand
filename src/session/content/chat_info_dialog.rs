@@ -106,7 +106,7 @@ impl ChatInfoDialog {
 
         match self.chat().unwrap().type_() {
             ChatType::Private(user) => {
-                self.setup_user_info(user);
+                self.setup_user_info(&user);
             }
             _ => {
                 imp.info_list.set_visible(false);
