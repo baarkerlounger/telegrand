@@ -123,7 +123,7 @@ mod message {
                     .map(MessageForwardInfo::origin)
                     .map(|forward_origin| match forward_origin {
                         MessageForwardOrigin::User(user) => {
-                            let user_expression = gtk::ObjectExpression::new(user);
+                            let user_expression = gtk::ObjectExpression::new(&user);
                             expressions::user_full_name(&user_expression)
                         }
                         MessageForwardOrigin::Chat { chat, .. }

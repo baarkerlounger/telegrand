@@ -1,8 +1,4 @@
 use gtk::glib;
-use gtk::prelude::*;
-use gtk::subclass::prelude::*;
-use tdlib::enums::MessageForwardOrigin as TelegramMessageForwardOrigin;
-use tdlib::types::MessageForwardInfo as TelegramForwardInfo;
 
 use crate::session::chat::Chat;
 use crate::session::User;
@@ -39,120 +35,63 @@ impl MessageForwardOrigin {
     }
 }
 
-mod imp {
+#[gobject::class(final)]
+mod message_forward_info {
     use super::*;
-
-    use once_cell::sync::Lazy;
+    use gtk::subclass::prelude::*;
     use once_cell::unsync::OnceCell;
     use std::cell::Cell;
+    use tdlib::enums::MessageForwardOrigin as TdMessageForwardOrigin;
+    use tdlib::types::MessageForwardInfo as TdMessageForwardInfo;
 
-    #[derive(Debug, Default)]
+    #[derive(Default)]
     pub(crate) struct MessageForwardInfo {
-        pub(super) date: Cell<i32>,
-        pub(super) origin: OnceCell<MessageForwardOrigin>,
+        #[property(get, boxed)]
+        origin: OnceCell<MessageForwardOrigin>,
+        #[property(get)]
+        date: Cell<i32>,
     }
 
-    #[glib::object_subclass]
-    impl ObjectSubclass for MessageForwardInfo {
-        const NAME: &'static str = "MessageForwardInfo";
-        type Type = super::MessageForwardInfo;
-    }
+    impl super::MessageForwardInfo {
+        pub(crate) fn from_td_object(td_object: TdMessageForwardInfo, chat: &Chat) -> Self {
+            let obj: Self = glib::Object::new(&[]).unwrap();
+            let imp = obj.imp();
 
-    impl ObjectImpl for MessageForwardInfo {
-        fn properties() -> &'static [glib::ParamSpec] {
-            static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
-                vec![
-                    glib::ParamSpecInt::new(
-                        "date",
-                        "Date",
-                        "The date when the message was originally sent",
-                        0,
-                        std::i32::MAX,
-                        0,
-                        glib::ParamFlags::READWRITE | glib::ParamFlags::CONSTRUCT_ONLY,
-                    ),
-                    glib::ParamSpecBoxed::new(
-                        "origin",
-                        "Origin",
-                        "The origin of the forwarded message",
-                        MessageForwardOrigin::static_type(),
-                        glib::ParamFlags::READWRITE | glib::ParamFlags::CONSTRUCT_ONLY,
-                    ),
-                ]
-            });
-            PROPERTIES.as_ref()
-        }
-
-        fn set_property(
-            &self,
-            _obj: &Self::Type,
-            _id: usize,
-            value: &glib::Value,
-            pspec: &glib::ParamSpec,
-        ) {
-            match pspec.name() {
-                "date" => self.date.set(value.get().unwrap()),
-                "origin" => self.origin.set(value.get().unwrap()).unwrap(),
-                _ => unimplemented!(),
-            }
-        }
-
-        fn property(&self, obj: &Self::Type, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
-            match pspec.name() {
-                "date" => obj.date().to_value(),
-                "origin" => obj.origin().to_value(),
-                _ => unimplemented!(),
-            }
-        }
-    }
-}
-
-glib::wrapper! {
-    pub(crate) struct MessageForwardInfo(ObjectSubclass<imp::MessageForwardInfo>);
-}
-
-impl MessageForwardInfo {
-    pub(crate) fn from_td_object(forward_info: TelegramForwardInfo, chat: &Chat) -> Self {
-        let origin = match forward_info.origin {
-            TelegramMessageForwardOrigin::User(data) => {
-                MessageForwardOrigin::User(chat.session().user_list().get(data.sender_user_id))
-            }
-            TelegramMessageForwardOrigin::Chat(data) => MessageForwardOrigin::Chat {
-                // author_signature: data.author_signature,
-                chat: chat.session().chat_list().get(data.sender_chat_id),
-            },
-            TelegramMessageForwardOrigin::Channel(data) => {
-                let chat = chat.session().chat_list().get(data.chat_id);
-                // let message = {
-                //     let weak = WeakRef::new();
-                //     weak.set(chat.history().message_by_id(data.message_id).as_ref());
-                //     weak
-                // };
-                MessageForwardOrigin::Channel {
+            let origin = match td_object.origin {
+                TdMessageForwardOrigin::User(data) => {
+                    MessageForwardOrigin::User(chat.session().user_list().get(data.sender_user_id))
+                }
+                TdMessageForwardOrigin::Chat(data) => MessageForwardOrigin::Chat {
                     // author_signature: data.author_signature,
-                    chat,
-                    // message,
+                    chat: chat.session().chat_list().get(data.sender_chat_id),
+                },
+                TdMessageForwardOrigin::Channel(data) => {
+                    let chat = chat.session().chat_list().get(data.chat_id);
+                    // let message = {
+                    //     let weak = WeakRef::new();
+                    //     weak.set(chat.history().message_by_id(data.message_id).as_ref());
+                    //     weak
+                    // };
+                    MessageForwardOrigin::Channel {
+                        // author_signature: data.author_signature,
+                        chat,
+                        // message,
+                    }
                 }
-            }
-            TelegramMessageForwardOrigin::HiddenUser(data) => MessageForwardOrigin::HiddenUser {
-                sender_name: data.sender_name,
-            },
-            TelegramMessageForwardOrigin::MessageImport(data) => {
-                MessageForwardOrigin::MessageImport {
+                TdMessageForwardOrigin::HiddenUser(data) => MessageForwardOrigin::HiddenUser {
                     sender_name: data.sender_name,
+                },
+                TdMessageForwardOrigin::MessageImport(data) => {
+                    MessageForwardOrigin::MessageImport {
+                        sender_name: data.sender_name,
+                    }
                 }
-            }
-        };
+            };
 
-        glib::Object::new(&[("date", &forward_info.date), ("origin", &origin)])
-            .expect("Failed to create MessageForwardInfo")
-    }
+            imp.origin.set(origin).unwrap();
+            imp.date.set(td_object.date);
 
-    pub(crate) fn date(&self) -> i32 {
-        self.imp().date.get()
-    }
-
-    pub(crate) fn origin(&self) -> &MessageForwardOrigin {
-        self.imp().origin.get().unwrap()
+            obj
+        }
     }
 }

@@ -258,7 +258,7 @@ pub(crate) trait MessageRowExt: IsA<MessageRow> {
                             MessageForwardOrigin::HiddenUser { sender_name }
                             | MessageForwardOrigin::MessageImport { sender_name } => {
                                 avatar.set_item(None);
-                                avatar.set_custom_text(Some(sender_name));
+                                avatar.set_custom_text(Some(&sender_name));
                             }
                         }
                     } else {
