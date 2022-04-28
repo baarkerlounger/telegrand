@@ -380,7 +380,7 @@ fn sender_name(user: &User) -> String {
 
 fn sender_display_name(message: &Message) -> String {
     match message.sender() {
-        MessageSender::User(data) => sender_name(data),
+        MessageSender::User(data) => sender_name(&data),
         MessageSender::Chat(data) => data.title(),
     }
 }

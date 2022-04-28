@@ -379,14 +379,14 @@ fn stringify_message(message: Message) -> String {
             stringify_message_with_sender_prefix(message, dim_and_escape(&data.text.text))
         }
         MessageContent::MessageBasicGroupChatCreate(_) => {
-            gettext!("{} created the group", sender_name(message.sender(), true))
+            gettext!("{} created the group", sender_name(&message.sender(), true))
         }
         MessageContent::MessageChatAddMembers(data) => {
             if message.sender().as_user().map(User::id).as_ref() == data.member_user_ids.get(0) {
                 if message.is_outgoing() {
                     gettext("You joined the group")
                 } else {
-                    gettext!("{} joined the group", sender_name(message.sender(), true))
+                    gettext!("{} joined the group", sender_name(&message.sender(), true))
                 }
             } else {
                 let session = message.chat().session();
@@ -416,7 +416,7 @@ fn stringify_message(message: Message) -> String {
                 } else {
                     gettext!(
                         "{} added {}",
-                        sender_name(message.sender(), true),
+                        sender_name(&message.sender(), true),
                         if first_members.is_empty() {
                             Cow::Borrowed(last_member)
                         } else {
@@ -436,7 +436,7 @@ fn stringify_message(message: Message) -> String {
             } else {
                 gettext!(
                     "{} joined the group via invite link",
-                    sender_name(message.sender(), true)
+                    sender_name(&message.sender(), true)
                 )
             }
         }
@@ -444,11 +444,11 @@ fn stringify_message(message: Message) -> String {
             if message.is_outgoing() {
                 gettext("You joined the group")
             } else {
-                gettext!("{} joined the group", sender_name(message.sender(), true))
+                gettext!("{} joined the group", sender_name(&message.sender(), true))
             }
         }
         MessageContent::MessageChatDeleteMember(data) => {
-            let sender_name = sender_name(message.sender(), true);
+            let sender_name = sender_name(&message.sender(), true);
             if message
                 .sender()
                 .as_user()
@@ -545,7 +545,7 @@ fn stringify_message(message: Message) -> String {
                 } else {
                     gettext!(
                         "{} removed the group photo",
-                        sender_name(message.sender(), true),
+                        sender_name(&message.sender(), true),
                     )
                 }
             }
@@ -558,7 +558,7 @@ fn stringify_message(message: Message) -> String {
                 } else {
                     gettext!(
                         "{} changed group photo",
-                        sender_name(message.sender(), true)
+                        sender_name(&message.sender(), true)
                     )
                 }
             }
@@ -574,7 +574,7 @@ fn stringify_message(message: Message) -> String {
             } else {
                 gettext!(
                     "{} pinned {}",
-                    sender_name(message.sender(), true),
+                    sender_name(&message.sender(), true),
                     stringify_pinned_message_content(
                         message.chat().history().message_by_id(data.message_id)
                     )
@@ -591,14 +591,14 @@ fn stringify_message(message: Message) -> String {
                 } else {
                     gettext!(
                         "{} changed group name to «{}»",
-                        sender_name(message.sender(), true),
+                        sender_name(&message.sender(), true),
                         data.title
                     )
                 }
             }
         },
         MessageContent::MessageContactRegistered => {
-            gettext!("{} joined Telegram", sender_name(message.sender(), true))
+            gettext!("{} joined Telegram", sender_name(&message.sender(), true))
         }
         _ => gettext("Unsupported message"),
     }
@@ -612,9 +612,10 @@ fn stringify_message_with_sender_prefix(message: Message, content: String) -> St
         } else {
             message
                 .forward_info()
+                .as_ref()
                 .map(MessageForwardInfo::origin)
                 .map(|forward_origin| match forward_origin {
-                    MessageForwardOrigin::User(user) => stringify_user(user, false),
+                    MessageForwardOrigin::User(user) => stringify_user(&user, false),
                     MessageForwardOrigin::Chat { chat, .. }
                     | MessageForwardOrigin::Channel { chat, .. } => chat.title(),
                     MessageForwardOrigin::HiddenUser { sender_name }
@@ -633,7 +634,7 @@ fn stringify_message_with_sender_prefix(message: Message, content: String) -> St
             let sender_name = if message.is_outgoing() {
                 gettext("You")
             } else {
-                escape(&sender_name(message.sender(), false))
+                escape(&sender_name(&message.sender(), false))
             };
 
             format!("{}: {}", sender_name, content)

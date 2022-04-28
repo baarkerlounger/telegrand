@@ -1,11 +1,6 @@
 use gtk::glib;
-use gtk::prelude::*;
-use gtk::subclass::prelude::*;
-use tdlib::enums::{MessageSender as TdMessageSender, Update};
-use tdlib::types::Message as TdMessage;
+use tdlib::enums::MessageSender as TdMessageSender;
 
-use crate::expressions;
-use crate::session::chat::{BoxedMessageContent, MessageForwardInfo, MessageForwardOrigin};
 use crate::session::{Chat, Session, User};
 
 #[derive(Clone, Debug, glib::Boxed)]
@@ -44,239 +39,116 @@ impl MessageSender {
     }
 }
 
-mod imp {
+#[gobject::class(final)]
+mod message {
     use super::*;
-    use glib::WeakRef;
-    use once_cell::sync::{Lazy, OnceCell};
+    use gobject::{ConstructCell, WeakCell};
+    use gtk::subclass::prelude::*;
+    use once_cell::unsync::OnceCell;
     use std::cell::{Cell, RefCell};
+    use tdlib::enums::Update;
+    use tdlib::types::Message as TdMessage;
 
-    #[derive(Debug, Default)]
+    use crate::expressions;
+    use crate::session::chat::{BoxedMessageContent, MessageForwardInfo, MessageForwardOrigin};
+
+    #[derive(Default)]
     pub(crate) struct Message {
-        pub(super) id: Cell<i64>,
-        pub(super) sender: OnceCell<MessageSender>,
-        pub(super) is_outgoing: Cell<bool>,
-        pub(super) date: Cell<i32>,
-        pub(super) content: RefCell<Option<BoxedMessageContent>>,
-        pub(super) chat: WeakRef<Chat>,
-        pub(super) forward_info: OnceCell<Option<MessageForwardInfo>>,
+        #[property(get)]
+        id: Cell<i64>,
+        #[property(get, boxed)]
+        sender: OnceCell<MessageSender>,
+        #[property(get, object)]
+        chat: WeakCell<Chat>,
+        #[property(get)]
+        is_outgoing: Cell<bool>,
+        #[property(get)]
+        date: Cell<i32>,
+        #[property(get, object)]
+        forward_info: RefCell<Option<MessageForwardInfo>>,
+        #[property(get, boxed)]
+        content: ConstructCell<BoxedMessageContent>,
     }
 
-    #[glib::object_subclass]
-    impl ObjectSubclass for Message {
-        const NAME: &'static str = "ChatMessage";
-        type Type = super::Message;
-    }
+    impl super::Message {
+        pub(crate) fn from_td_object(td_object: TdMessage, chat: &Chat) -> Self {
+            let obj: Self = glib::Object::new(&[]).unwrap();
+            let imp = obj.imp();
 
-    impl ObjectImpl for Message {
-        fn properties() -> &'static [glib::ParamSpec] {
-            static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
-                vec![
-                    glib::ParamSpecInt64::new(
-                        "id",
-                        "Id",
-                        "The id of this message",
-                        std::i64::MIN,
-                        std::i64::MAX,
-                        0,
-                        glib::ParamFlags::READWRITE | glib::ParamFlags::CONSTRUCT_ONLY,
-                    ),
-                    glib::ParamSpecBoxed::new(
-                        "sender",
-                        "Sender",
-                        "The sender of this message",
-                        MessageSender::static_type(),
-                        glib::ParamFlags::WRITABLE | glib::ParamFlags::CONSTRUCT_ONLY,
-                    ),
-                    glib::ParamSpecBoolean::new(
-                        "is-outgoing",
-                        "Is Outgoing",
-                        "Whether this message is outgoing or not",
-                        false,
-                        glib::ParamFlags::READWRITE | glib::ParamFlags::CONSTRUCT_ONLY,
-                    ),
-                    glib::ParamSpecInt::new(
-                        "date",
-                        "Date",
-                        "The point in time when this message was sent",
-                        std::i32::MIN,
-                        std::i32::MAX,
-                        0,
-                        glib::ParamFlags::READWRITE | glib::ParamFlags::CONSTRUCT_ONLY,
-                    ),
-                    glib::ParamSpecBoxed::new(
-                        "content",
-                        "Content",
-                        "The content of this message",
-                        BoxedMessageContent::static_type(),
-                        glib::ParamFlags::READWRITE
-                            | glib::ParamFlags::CONSTRUCT
-                            | glib::ParamFlags::EXPLICIT_NOTIFY,
-                    ),
-                    glib::ParamSpecObject::new(
-                        "chat",
-                        "Chat",
-                        "The chat relative to this message",
-                        Chat::static_type(),
-                        glib::ParamFlags::READWRITE | glib::ParamFlags::CONSTRUCT_ONLY,
-                    ),
-                    glib::ParamSpecObject::new(
-                        "forward-info",
-                        "Forward Info",
-                        "The forward info of this message",
-                        MessageForwardInfo::static_type(),
-                        glib::ParamFlags::READWRITE | glib::ParamFlags::CONSTRUCT_ONLY,
-                    ),
-                ]
-            });
-            PROPERTIES.as_ref()
-        }
-
-        fn set_property(
-            &self,
-            obj: &Self::Type,
-            _id: usize,
-            value: &glib::Value,
-            pspec: &glib::ParamSpec,
-        ) {
-            match pspec.name() {
-                "id" => self.id.set(value.get().unwrap()),
-                "sender" => self.sender.set(value.get().unwrap()).unwrap(),
-                "is-outgoing" => self.is_outgoing.set(value.get().unwrap()),
-                "date" => self.date.set(value.get().unwrap()),
-                "content" => obj.set_content(value.get().unwrap()),
-                "chat" => self.chat.set(Some(&value.get().unwrap())),
-                "forward-info" => self.forward_info.set(value.get().unwrap()).unwrap(),
-                _ => unimplemented!(),
-            }
-        }
-
-        fn property(&self, obj: &Self::Type, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
-            match pspec.name() {
-                "id" => obj.id().to_value(),
-                "is-outgoing" => obj.is_outgoing().to_value(),
-                "date" => obj.date().to_value(),
-                "content" => obj.content().to_value(),
-                "chat" => obj.chat().to_value(),
-                "forward-info" => obj.forward_info().to_value(),
-                _ => unimplemented!(),
-            }
-        }
-    }
-}
-
-glib::wrapper! {
-    pub(crate) struct Message(ObjectSubclass<imp::Message>);
-}
-
-impl Message {
-    pub(crate) fn new(message: TdMessage, chat: &Chat) -> Self {
-        let content = BoxedMessageContent(message.content);
-
-        glib::Object::new(&[
-            ("id", &message.id),
-            (
-                "sender",
-                &MessageSender::from_td_object(&message.sender_id, &chat.session()),
-            ),
-            ("is-outgoing", &message.is_outgoing),
-            ("date", &message.date),
-            ("content", &content),
-            ("chat", chat),
-            (
-                "forward-info",
-                &message
+            imp.id.set(td_object.id);
+            imp.sender
+                .set(MessageSender::from_td_object(
+                    &td_object.sender_id,
+                    &chat.session(),
+                ))
+                .unwrap();
+            imp.chat.set(Some(chat));
+            imp.is_outgoing.set(td_object.is_outgoing);
+            imp.date.set(td_object.date);
+            imp.forward_info.replace(
+                td_object
                     .forward_info
-                    .map(|forward_info| MessageForwardInfo::from_td_object(forward_info, chat)),
-            ),
-        ])
-        .expect("Failed to create Message")
-    }
+                    .map(|f| MessageForwardInfo::from_td_object(f, chat)),
+            );
+            imp.content
+                .replace(Some(BoxedMessageContent(td_object.content)));
 
-    pub(crate) fn handle_update(&self, update: Update) {
-        if let Update::MessageContent(data) = update {
-            let new_content = BoxedMessageContent(data.new_content);
-            self.set_content(new_content);
+            obj
         }
-    }
 
-    pub(crate) fn id(&self) -> i64 {
-        self.imp().id.get()
-    }
-
-    pub(crate) fn sender(&self) -> &MessageSender {
-        self.imp().sender.get().unwrap()
-    }
-
-    pub(crate) fn is_outgoing(&self) -> bool {
-        self.imp().is_outgoing.get()
-    }
-
-    pub(crate) fn date(&self) -> i32 {
-        self.imp().date.get()
-    }
-
-    pub(crate) fn content(&self) -> BoxedMessageContent {
-        self.imp().content.borrow().as_ref().unwrap().to_owned()
-    }
-
-    pub(crate) fn set_content(&self, content: BoxedMessageContent) {
-        if self.imp().content.borrow().as_ref() == Some(&content) {
-            return;
-        }
-        self.imp().content.replace(Some(content));
-        self.notify("content");
-    }
-
-    pub(crate) fn connect_content_notify<F: Fn(&Self, &glib::ParamSpec) + 'static>(
-        &self,
-        f: F,
-    ) -> glib::SignalHandlerId {
-        self.connect_notify_local(Some("content"), f)
-    }
-
-    pub(crate) fn chat(&self) -> Chat {
-        self.imp().chat.upgrade().unwrap()
-    }
-
-    pub(crate) fn forward_info(&self) -> Option<&MessageForwardInfo> {
-        self.imp().forward_info.get().unwrap().as_ref()
-    }
-
-    pub(crate) fn sender_name_expression(&self) -> gtk::Expression {
-        match self.sender() {
-            MessageSender::User(user) => {
-                let user_expression = gtk::ConstantExpression::new(user);
-                expressions::user_full_name(&user_expression)
+        pub(crate) fn handle_update(&self, update: Update) {
+            if let Update::MessageContent(data) = update {
+                self.set_content(BoxedMessageContent(data.new_content));
             }
-            MessageSender::Chat(chat) => gtk::ConstantExpression::new(chat)
-                .chain_property::<Chat>("title")
-                .upcast(),
         }
-    }
 
-    pub(crate) fn sender_display_name_expression(&self) -> gtk::Expression {
-        if self.chat().is_own_chat() {
-            self.forward_info()
-                .map(MessageForwardInfo::origin)
-                .map(|forward_origin| match forward_origin {
-                    MessageForwardOrigin::User(user) => {
-                        let user_expression = gtk::ObjectExpression::new(user);
-                        expressions::user_full_name(&user_expression)
-                    }
-                    MessageForwardOrigin::Chat { chat, .. }
-                    | MessageForwardOrigin::Channel { chat, .. } => {
-                        gtk::ConstantExpression::new(chat)
-                            .chain_property::<Chat>("title")
-                            .upcast()
-                    }
-                    MessageForwardOrigin::HiddenUser { sender_name }
-                    | MessageForwardOrigin::MessageImport { sender_name } => {
-                        gtk::ConstantExpression::new(&sender_name).upcast()
-                    }
-                })
-                .unwrap_or_else(|| self.sender_display_name_expression())
-        } else {
-            self.sender_name_expression()
+        // TODO: This should be moved to the expressions module
+        pub(crate) fn sender_name_expression(&self) -> gtk::Expression {
+            match self.sender() {
+                MessageSender::User(user) => {
+                    let user_expression = gtk::ConstantExpression::new(&user);
+                    expressions::user_full_name(&user_expression)
+                }
+                MessageSender::Chat(chat) => gtk::ConstantExpression::new(&chat)
+                    .chain_property::<Chat>("title")
+                    .upcast(),
+            }
+        }
+
+        // TODO: This should be moved to the expressions module
+        pub(crate) fn sender_display_name_expression(&self) -> gtk::Expression {
+            if self.chat().is_own_chat() {
+                self.forward_info()
+                    .as_ref()
+                    .map(MessageForwardInfo::origin)
+                    .map(|forward_origin| match forward_origin {
+                        MessageForwardOrigin::User(user) => {
+                            let user_expression = gtk::ObjectExpression::new(user);
+                            expressions::user_full_name(&user_expression)
+                        }
+                        MessageForwardOrigin::Chat { chat, .. }
+                        | MessageForwardOrigin::Channel { chat, .. } => {
+                            gtk::ConstantExpression::new(&chat)
+                                .chain_property::<Chat>("title")
+                                .upcast()
+                        }
+                        MessageForwardOrigin::HiddenUser { sender_name }
+                        | MessageForwardOrigin::MessageImport { sender_name } => {
+                            gtk::ConstantExpression::new(&sender_name).upcast()
+                        }
+                    })
+                    .unwrap_or_else(|| self.sender_display_name_expression())
+            } else {
+                self.sender_name_expression()
+            }
+        }
+
+        fn set_content(&self, content: BoxedMessageContent) {
+            let imp = self.imp();
+            let old = imp.content.replace(Some(content));
+            if old != *imp.content.borrow() {
+                self.notify_content();
+            }
         }
     }
 }

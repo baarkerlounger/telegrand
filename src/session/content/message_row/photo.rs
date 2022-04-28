@@ -87,7 +87,7 @@ impl MessagePhoto {
 
             // Load photo
             let handler_id =
-                message.connect_content_notify(clone!(@weak self as obj => move |message, _| {
+                message.connect_content_notify(clone!(@weak self as obj => move |message| {
                     obj.update_photo(message);
                 }));
             imp.handler_id.replace(Some(handler_id));

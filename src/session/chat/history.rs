@@ -276,7 +276,7 @@ impl History {
         let mut message_map = imp.message_map.borrow_mut();
 
         if let Entry::Vacant(entry) = message_map.entry(message.id) {
-            let message = Message::new(message, &self.chat());
+            let message = Message::from_td_object(message, &self.chat());
 
             entry.insert(message.clone());
 
@@ -299,7 +299,7 @@ impl History {
         imp.list.borrow_mut().reserve(added);
 
         for message in messages {
-            let message = Message::new(message, &chat);
+            let message = Message::from_td_object(message, &chat);
 
             imp.message_map
                 .borrow_mut()
